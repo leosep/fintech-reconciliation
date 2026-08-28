@@ -1,0 +1,149 @@
+{
+  "name": "Fintech Reconciliation - Pipeline diario",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 7 * * *" }
+          ]
+        }
+      },
+      "name": "Cron - Todos los días 7:00 AM",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/data/incoming/internal_transactions.csv"
+      },
+      "name": "Leer archivo interno",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [450, 200]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "fileSelector": "/data/incoming/bank_transactions.csv"
+      },
+      "name": "Leer archivo del banco",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "typeVersion": 1,
+      "position": [450, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/automation/run-pipeline",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "triggered_by", "value": "n8n" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "internal_file",
+              "parameterType": "formBinaryData",
+              "inputDataFieldName": "data_interno"
+            },
+            {
+              "name": "bank_file",
+              "parameterType": "formBinaryData",
+              "inputDataFieldName": "data_banco"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Ejecutar pipeline de conciliación (API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300],
+      "notes": "Llama a POST /api/automation/run-pipeline. Devuelve el resumen de importación, conciliación, y la URL para descargar el reporte Excel."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"reconciliation\"][\"amount_difference\"] + $json[\"reconciliation\"][\"missing_in_bank\"] + $json[\"reconciliation\"][\"missing_internal\"] + $json[\"reconciliation\"][\"duplicates\"]}}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "name": "¿Hay excepciones?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [950, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:8000{{$json[\"report_download_url\"]}}",
+        "options": { "response": { "response": { "responseFormat": "file" } } }
+      },
+      "name": "Descargar reporte Excel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "conciliacion@empresa.com",
+        "toEmail": "operaciones@empresa.com",
+        "subject": "=Conciliación diaria: {{$json[\"reconciliation\"][\"amount_difference\"] + $json[\"reconciliation\"][\"missing_in_bank\"] + $json[\"reconciliation\"][\"missing_internal\"] + $json[\"reconciliation\"][\"duplicates\"]}} excepciones detectadas",
+        "text": "Se detectaron excepciones en la conciliación de hoy. Ver el Excel adjunto para el detalle.",
+        "options": {}
+      },
+      "name": "Enviar email con reporte",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {},
+      "name": "Sin excepciones (no hacer nada)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1200, 400]
+    }
+  ],
+  "connections": {
+    "Cron - Todos los días 7:00 AM": {
+      "main": [[
+        { "node": "Leer archivo interno", "type": "main", "index": 0 },
+        { "node": "Leer archivo del banco", "type": "main", "index": 0 }
+      ]]
+    },
+    "Leer archivo interno": {
+      "main": [[{ "node": "Ejecutar pipeline de conciliación (API)", "type": "main", "index": 0 }]]
+    },
+    "Leer archivo del banco": {
+      "main": [[{ "node": "Ejecutar pipeline de conciliación (API)", "type": "main", "index": 0 }]]
+    },
+    "Ejecutar pipeline de conciliación (API)": {
+      "main": [[{ "node": "¿Hay excepciones?", "type": "main", "index": 0 }]]
+    },
+    "¿Hay excepciones?": {
+      "main": [
+        [{ "node": "Descargar reporte Excel", "type": "main", "index": 0 }],
+        [{ "node": "Sin excepciones (no hacer nada)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Descargar reporte Excel": {
+      "main": [[{ "node": "Enviar email con reporte", "type": "main", "index": 0 }]]
+    }
+  },
+  "meta": {
+    "instructions": "Importar en n8n con 'Import from File'. Ajustar la URL http://localhost:8000 por la URL real donde corre la API (uvicorn app.main:app), y las rutas de los archivos de entrada según tu entorno."
+  }
+}

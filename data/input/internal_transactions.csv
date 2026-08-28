@@ -1,0 +1,7 @@
+transaction_id,customer,amount,transaction_date,currency
+TX-001,Juan Perez,100.00,2026-08-25,DOP
+TX-002,Pedro Gomez,250.00,2026-08-25,DOP
+TX-003,Maria Rodriguez,500.00,2026-08-25,DOP
+TX-005,Ana Diaz,150.75,2026-08-25,DOP
+TX-006,Carlos Mena,80.00,2026-08-25,DOP
+TX-007,Luisa Fernandez,1500.00,2026-08-25,DOP
